@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Task 6: A Basic Flask app with internationalization support.
+Task 8: A Basic Flask app with internationalization support.
 """
-from flask_babel import Babel
+import pytz
+from datetime import datetime
 from typing import Union, Dict
+from flask_babel import Babel, format_datetime
 from flask import Flask, render_template, request, g
 
 
@@ -48,22 +50,43 @@ def before_request() -> None:
 def get_locale() -> str:
     """Retrieves the locale for a web page.
     """
-    locale = request.args.get('locale', '')
+    queries = request.query_string.decode('utf-8').split('&')
+    query_table = dict(map(
+        lambda x: (x if '=' in x else '{}='.format(x)).split('='),
+        queries,
+    ))
+    locale = query_table.get('locale', '')
     if locale in app.config["LANGUAGES"]:
         return locale
-    if g.user and g.user['locale'] in app.config["LANGUAGES"]:
-        return g.user['locale']
+    user_details = getattr(g, 'user', None)
+    if user_details and user_details['locale'] in app.config["LANGUAGES"]:
+        return user_details['locale']
     header_locale = request.headers.get('locale', '')
     if header_locale in app.config["LANGUAGES"]:
         return header_locale
-    return request.accept_languages.best_match(app.config["LANGUAGES"])
+    return app.config['BABEL_DEFAULT_LOCALE']
+
+
+@babel.timezoneselector
+def get_timezone() -> str:
+    """Retrieves the timezone for a web page.
+    """
+    timezone = request.args.get('timezone', '').strip()
+    if not timezone and g.user:
+        timezone = g.user['timezone']
+    try:
+        return pytz.timezone(timezone).zone
+    except pytz.exceptions.UnknownTimeZoneError:
+        return app.config['BABEL_DEFAULT_TIMEZONE']
 
 
 @app.route('/')
 def get_index() -> str:
     """API route: home/index page.
     """
-    return render_template('6-index.html')
+    current_time = datetime.now(pytz.timezone(get_timezone()))
+    formatted_time = format_datetime(current_time)
+    return render_template('index.html', current_time=formatted_time)
 
 
 if __name__ == '__main__':
